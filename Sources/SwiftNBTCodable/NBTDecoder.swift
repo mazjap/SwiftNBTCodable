@@ -7,6 +7,10 @@
 
 import Foundation
 
+public func decodeNBT(from data: Data) throws -> NBTTag {
+    try NBTByte.tag(from: data)
+}
+
 enum NBTDecoder {
     static func decodeUByte(_ data: inout Data) throws -> UInt8 {
         guard let value = data.popFirst() else {
