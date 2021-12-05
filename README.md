@@ -1,3 +1,8 @@
 # SwiftNBTCodable
 
-A description of this package.
+An NBT file decoder
+
+### Usage
+
+
+### Installation
