@@ -47,6 +47,14 @@ public struct NBTByte: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: UInt8) {
+        self.init(name: name, data: Data([value]))!
+    }
+    
+    public init(name: String?, value: Int8) {
+        self.init(name: name, value: UInt8(bitPattern: value))
+    }
 }
 
 public struct NBTShort: NBTTag {
@@ -73,6 +81,17 @@ public struct NBTShort: NBTTag {
         guard value?.typeId == typeId else {
             return nil
         }
+    }
+    
+    public init(name: String?, value: UInt16) {
+        var value = value
+        let data = Data(bytes: &value, count: MemoryLayout<UInt16>.size)
+        
+        self.init(name: name, data: data)!
+    }
+    
+    public init(name: String?, value: Int16) {
+        self.init(name: name, value: UInt16(bitPattern: value))
     }
 }
 
@@ -101,6 +120,18 @@ public struct NBTInt: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: UInt32) {
+        var value = value
+        
+        let data = Data(bytes: &value, count: MemoryLayout<UInt32>.size)
+        
+        self.init(name: name, data: data)!
+    }
+    
+    public init(name: String?, value: Int32) {
+        self.init(name: name, value: UInt32(bitPattern: value))
+    }
 }
 
 public struct NBTLong: NBTTag {
@@ -128,6 +159,18 @@ public struct NBTLong: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: UInt64) {
+        var value = value
+        
+        let data = Data(bytes: &value, count: MemoryLayout<UInt64>.size)
+        
+        self.init(name: name, data: data)!
+    }
+    
+    public init(name: String?, value: Int64) {
+        self.init(name: name, value: UInt64(bitPattern: value))
+    }
 }
 
 public struct NBTFloat: NBTTag {
@@ -150,6 +193,14 @@ public struct NBTFloat: NBTTag {
         guard value?.typeId == typeId else {
             return nil
         }
+    }
+    
+    public init(name: String?, value: Float32) {
+        var value = value
+        
+        let data = Data(bytes: &value, count: MemoryLayout<Float32>.size)
+        
+        self.init(name: name, data: data)!
     }
 }
 
@@ -174,6 +225,14 @@ public struct NBTDouble: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: Float64) {
+        var value = value
+        
+        let data = Data(bytes: &value, count: MemoryLayout<Float64>.size)
+        
+        self.init(name: name, data: data)!
+    }
 }
 
 public struct NBTByteArray: NBTTag {
@@ -197,6 +256,10 @@ public struct NBTByteArray: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: [Int8]) {
+        self.init(name: name, data: Data(value.map(UInt8.init(bitPattern:))))!
+    }
 }
 
 public struct NBTString: NBTTag {
@@ -217,6 +280,15 @@ public struct NBTString: NBTTag {
         self.data = data
 
         guard value?.typeId == typeId else {
+            return nil
+        }
+    }
+    
+    /// Value must be encodable to utf8
+    public init?(name: String?, value: String) {
+        if let data = value.data(using: .utf8) {
+            self.init(name: name, data: data)
+        } else {
             return nil
         }
     }
@@ -243,6 +315,10 @@ public struct NBTList: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: [TagValue]) {
+        self.init(name: name, data: value.withUnsafeBytes { $0.load(as: Data.self) })!
+    }
 }
 
 public struct NBTCompound: NBTTag {
@@ -265,6 +341,18 @@ public struct NBTCompound: NBTTag {
         guard value?.typeId == typeId else {
             return nil
         }
+    }
+    
+    public init(name: String?, value: [NBTTag]) {
+        self.init(
+            name: name,
+            data: value.reduce(
+                Data(),
+                {
+                    $0 + ((try? $1.encode(compressed: false)) ?? Data())
+                }
+            )
+        )!
     }
 }
 
@@ -289,6 +377,19 @@ public struct NBTIntArray: NBTTag {
             return nil
         }
     }
+    
+    public init(name: String?, value: [Int32]) {
+        self.init(
+            name: name,
+            data: value.reduce(
+                Data(),
+                {
+                    var value = $1
+                    return $0 + Data(bytes: &value, count: MemoryLayout<Int32>.size)
+                }
+            )
+        )!
+    }
 }
 
 public struct NBTLongArray: NBTTag {
@@ -311,5 +412,17 @@ public struct NBTLongArray: NBTTag {
         guard value?.typeId == typeId else {
             return nil
         }
+    }
+    
+    public init(name: String?, value: [Int64]) {
+        self.init(
+            name: name,
+            data: value.reduce(
+                Data(), {
+                    var value = $1
+                    return $0 + Data(bytes: &value, count: MemoryLayout<Int64>.size)
+                }
+            )
+        )!
     }
 }

@@ -8,19 +8,25 @@
 import Foundation
 import Gzip
 
-public protocol NBTTag {
+public protocol NBTTag: CustomStringConvertible {
     var name: String? { get set }
     var data: Data { get set }
     var typeId: Int8 { get }
     
     init?(name: String?, data: Data)
-    
-//    func encode(compressed: Bool) throws -> Data
 }
 
 extension NBTTag {
-    var value: TagValue! {
+    public var value: TagValue! {
         try? .init(typeId, data: data)
+    }
+    
+    public var description: String {
+        let nameString = (name == nil) ? "" : "\n\tName: \(name!)"
+        let valueString = (value == nil) ? "" : "\n\tValue: \(value!)"
+        let dataPointer = "\n\tData pointer: \(data)"
+        
+        return "\(type(of: self)):\(nameString)\(valueString)\(dataPointer)"
     }
     
     init?(name: String?, _ d: inout Data) {
@@ -29,15 +35,28 @@ extension NBTTag {
         _ = try? TagValue(typeId, data: &d)
     }
     
+    func encode(compressed: Bool) throws -> Data {
+        var data = Data([UInt8(bitPattern: value.typeId)])
+        
+        let nameData = name?.data(using: .utf8)
+        var nameLength = UInt16(nameData?.count ?? 0)
+        
+        data.append(Data(bytes: &nameLength, count: MemoryLayout<UInt16>.size))
+        
+        if let nameData = nameData {
+            data.append(nameData)
+        }
+        
+        data.append(try value.encode(compressed: false))
+        
+        return compressed ? try data.gzipped() : data
+    }
+    
     static func tag(from data: Data) throws -> NBTTag {
         var copy: Data
         
         if data.isGzipped {
             copy = try data.gunzipped()
-            
-            copy.enumerated().forEach { (index, byte) in
-                print("\(index): \(String(byte, radix: 16, uppercase: false)) | \(byte)")
-            }
         } else {
             copy = data
         }
@@ -48,8 +67,6 @@ extension NBTTag {
     static func tag(from data: inout Data) throws -> NBTTag {
         let typeId = try NBTDecoder.decodeByte(&data)
         
-        print("\(data.startIndex)/\(data.endIndex): \(Float32(data.startIndex) / Float32(data.endIndex))")
-        
         if typeId == TagValue.end.typeId || data.startIndex == data.endIndex {
             return NBTEnd()
         } else {
@@ -58,7 +75,6 @@ extension NBTTag {
             
             if nameLength > 0, let n = String(data: Data(try data.popFirst(nameLength)), encoding: .utf8) {
                 name = n
-                print(n)
             } else {
                 name = nil
             }
@@ -113,7 +129,7 @@ extension NBTTag {
                     return array
                 }
             default:
-                NSLog("An unknown tag type (\(typeId)) was found. Please ensure the data you are decoding is valid NBT and then open an issue on github: https://github.com/mazjap/SwiftNBTCodable")
+                NSLog("An unknown tag type (\(typeId)) was found. Please ensure the data you are decoding is valid NBT. If so, please open an issue on github: https://github.com/mazjap/SwiftNBTCodable")
                 throw NBTError.unknownTagType(typeId)
             }
             
@@ -167,6 +183,71 @@ indirect enum TagValue {
         case .longArray:
             return 12
         }
+    }
+    
+    /// Returns compressed data
+    public var asData: Data? {
+        try? encode()
+    }
+    
+    public func encode(compressed: Bool = true) throws -> Data {
+        let data: Data
+        
+        switch self {
+        case .end:
+            data = Data()
+        case let .byte(byte):
+            data = Data([UInt8(bitPattern: byte)])
+        case let .short(short):
+            var value = short
+            data = Data(bytes: &value, count: MemoryLayout<Int16>.size)
+        case let .int(int):
+            var value = int
+            data = Data(bytes: &value, count: MemoryLayout<Int32>.size)
+        case let .long(long):
+            var value = long
+            data = Data(bytes: &value, count: MemoryLayout<Int64>.size)
+        case let .float(float):
+            var value = float
+            data = Data(bytes: &value, count: MemoryLayout<Float32>.size)
+        case let .double(double):
+            var value = double
+            data = Data(bytes: &value, count: MemoryLayout<Float64>.size)
+        case let .byteArray(array):
+            data = Data(array.map(UInt8.init(bitPattern:)))
+        case let .string(string):
+            data = string.data(using: .utf8) ?? Data()
+        case let .list(array):
+            var d = Data()
+            
+            try array.forEach {
+                d.append(try $0.encode(compressed: false))
+            }
+            
+            data = d
+        case let .compound(array):
+            var d = Data()
+            
+            try array.forEach {
+                d.append(try $0.encode(compressed: false))
+            }
+            
+            data = d
+        case let .intArray(array):
+            data = array.reduce(Data(), {
+                var value = $1
+                
+                return $0 + Data(bytes: &value, count: MemoryLayout<Int32>.size)
+            })
+        case let .longArray(array):
+            data = array.reduce(Data(), {
+                var value = $1
+                
+                return $0 + Data(bytes: &value, count: MemoryLayout<Int64>.size)
+            })
+        }
+        
+        return compressed ? try data.gzipped() : data
     }
     
     init(_ tagType: Int8, data: Data) throws {
@@ -275,7 +356,7 @@ indirect enum TagValue {
             
             self = .longArray(longArray)
         default:
-            NSLog("An unknown tag type (\(tagType)) was found. Please ensure the data you are decoding is valid NBT and then open an issue on github: https://github.com/mazjap/SwiftNBTCodable")
+            NSLog("An unknown tag type (\(tagType)) was found. Please ensure the data you are decoding is valid NBT. If so, please open an issue on github: https://github.com/mazjap/SwiftNBTCodable")
             throw NBTError.unknownTagType(tagType)
         }
     }
